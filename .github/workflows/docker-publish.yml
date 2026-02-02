@@ -24,7 +24,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/dash-faucet
+          images: dashpay/dash-faucet
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
