@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     cap_hard_site_key: str = ""
     cap_hard_secret: str = ""
 
+    # Promo codes config file path
+    promo_codes_file: str = "promo_codes.json"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

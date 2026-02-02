@@ -641,6 +641,9 @@
                             <span class="btn-text">Send</span>
                         </button>
                     </div>
+                    <div style="margin-top: 10px;">
+                        <input type="text" id="promoCodeInput" placeholder="Promo code (optional)" style="padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #e0e0e0; font-size: 0.9rem; width: 250px;">
+                    </div>
                     <div class="error" id="coreErrorBox"></div>
                 </div>
 
@@ -1038,9 +1041,13 @@
                 const capToken = await solveCap(btn, 'Send');
                 btn.querySelector('.btn-text').textContent = 'Sending...';
 
+                const promoCode = document.getElementById('promoCodeInput').value.trim();
                 const body = { address };
                 if (capToken) {
                     body.capToken = capToken;
+                }
+                if (promoCode) {
+                    body.promoCode = promoCode;
                 }
 
                 let response = await fetch('/api/core-faucet', {
@@ -1152,6 +1159,7 @@
             const card = document.getElementById('coreFaucetCard');
             card.classList.remove('show-config', 'show-results', 'success');
             document.getElementById('addressInput').value = '';
+            document.getElementById('promoCodeInput').value = '';
             document.getElementById('coreErrorBox').classList.remove('visible');
         }
 

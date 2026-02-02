@@ -34,6 +34,7 @@ class CoreFaucetRequest(BaseModel):
     address: str
     capToken: str | None = None
     hardCapToken: str | None = None
+    promoCode: str | None = None
 
 
 class CoreFaucetResponse(BaseModel):
@@ -87,6 +88,7 @@ from app.services.asset_lock import (
 )
 from app.services.instant_lock import wait_for_instant_lock, InstantLockTimeout
 from app.services.proof_builder import build_instant_asset_lock_proof
+from app.services.promo import promo_service
 
 
 router = APIRouter(prefix="/api", tags=["faucet"])
@@ -590,16 +592,34 @@ async def core_faucet(request: Request, body: CoreFaucetRequest) -> CoreFaucetRe
             detail={"error": "Invalid address format"}
         )
 
+    # Determine send amount (promo code may override)
+    send_amount = settings.core_faucet_amount
+    promo_code_used = None
+
+    if body.promoCode:
+        promo_amount = promo_service.validate(body.promoCode, client_ip)
+        if promo_amount is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid or already used promo code"}
+            )
+        send_amount = promo_amount
+        promo_code_used = body.promoCode
+
     try:
         # Send DASH to the address
-        txid = dash_client.send_to_address(address, settings.core_faucet_amount)
+        txid = dash_client.send_to_address(address, send_amount)
 
         # Record successful request for rate limiting
         rate_limiter.record_request(client_ip)
 
+        # Record promo code usage
+        if promo_code_used:
+            promo_service.record_usage(promo_code_used, client_ip)
+
         return CoreFaucetResponse(
             txid=txid,
-            amount=settings.core_faucet_amount,
+            amount=send_amount,
             address=address
         )
 
