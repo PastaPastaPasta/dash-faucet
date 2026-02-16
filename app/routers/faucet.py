@@ -597,7 +597,7 @@ async def core_faucet(request: Request, body: CoreFaucetRequest) -> CoreFaucetRe
     promo_code_used = None
 
     if body.promoCode:
-        promo_amount = promo_service.validate(body.promoCode, client_ip)
+        promo_amount = promo_service.claim(body.promoCode, client_ip)
         if promo_amount is None:
             raise HTTPException(
                 status_code=400,
@@ -613,10 +613,6 @@ async def core_faucet(request: Request, body: CoreFaucetRequest) -> CoreFaucetRe
         # Record successful request for rate limiting
         rate_limiter.record_request(client_ip)
 
-        # Record promo code usage
-        if promo_code_used:
-            promo_service.record_usage(promo_code_used, client_ip)
-
         return CoreFaucetResponse(
             txid=txid,
             amount=send_amount,
@@ -624,8 +620,14 @@ async def core_faucet(request: Request, body: CoreFaucetRequest) -> CoreFaucetRe
         )
 
     except HTTPException:
+        # Release promo code claim on failure so the user can retry
+        if promo_code_used:
+            promo_service.release(promo_code_used, client_ip)
         raise
     except Exception as e:
+        # Release promo code claim on failure so the user can retry
+        if promo_code_used:
+            promo_service.release(promo_code_used, client_ip)
         error_msg = str(e)
         # Check for common RPC errors
         if "Invalid address" in error_msg or "Invalid Dash address" in error_msg:

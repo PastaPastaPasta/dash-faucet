@@ -35,6 +35,8 @@ class PromoService:
                 logger.warning(
                     "Failed to load promo codes from %s: %s", p, e
                 )
+        else:
+            logger.warning("Promo codes file not found: %s", p)
 
         # Merge in env var codes (overrides file entries on conflict)
         env_codes = os.environ.get("PROMO_CODES")
@@ -43,15 +45,21 @@ class PromoService:
                 data = json.loads(env_codes)
                 for code, info in data.items():
                     self._codes[code.upper()] = info["amount"]
-            except (json.JSONDecodeError, Exception) as e:
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
                 logger.warning(
-                    "Invalid PROMO_CODES env var (falling back to file only): "
-                    "%s — value was: %s", e, env_codes
+                    "Invalid PROMO_CODES env var (falling back to file only): %s",
+                    e,
                 )
 
-    def validate(self, code: str, ip: str) -> float | None:
-        """Return the promo amount if the code is valid and not used by this IP
-        within the last hour. Returns None if the code is unknown."""
+    def claim(self, code: str, ip: str) -> float | None:
+        """Atomically validate and record promo code usage.
+
+        Returns the promo amount if the code is valid and not used by this IP
+        within the last hour. Returns None otherwise.
+
+        This combines validation and recording under a single lock to prevent
+        TOCTOU race conditions with concurrent redemptions.
+        """
         code = code.upper()
         ip = normalize_ip(ip)
 
@@ -63,13 +71,19 @@ class PromoService:
             self._cleanup(code, now)
             if ip in self._usage[code]:
                 return None
+            # Record usage atomically with validation
+            self._usage[code][ip] = now
             return self._codes[code]
 
-    def record_usage(self, code: str, ip: str) -> None:
+    def release(self, code: str, ip: str) -> None:
+        """Undo a claim (e.g. when the transaction fails after claiming).
+
+        Removes the usage record so the IP can try again.
+        """
         code = code.upper()
         ip = normalize_ip(ip)
         with self._lock:
-            self._usage[code][ip] = time.time()
+            self._usage[code].pop(ip, None)
 
     def _cleanup(self, code: str, now: float) -> None:
         cutoff = now - 3600
