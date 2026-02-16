@@ -1,5 +1,7 @@
 """Promo code service for the core faucet."""
 import json
+import logging
+import os
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -7,6 +9,8 @@ from threading import Lock
 
 from app.config import settings
 from app.middleware.rate_limit import normalize_ip
+
+logger = logging.getLogger(__name__)
 
 
 class PromoService:
@@ -19,13 +23,26 @@ class PromoService:
         self._load(path)
 
     def _load(self, path: str) -> None:
+        # Load from JSON file first
         p = Path(path)
-        if not p.exists():
-            return
-        with open(p) as f:
-            data = json.load(f)
-        for code, info in data.items():
-            self._codes[code.upper()] = info["amount"]
+        if p.exists():
+            with open(p) as f:
+                data = json.load(f)
+            for code, info in data.items():
+                self._codes[code.upper()] = info["amount"]
+
+        # Merge in env var codes (overrides file entries on conflict)
+        env_codes = os.environ.get("PROMO_CODES")
+        if env_codes:
+            try:
+                data = json.loads(env_codes)
+                for code, info in data.items():
+                    self._codes[code.upper()] = info["amount"]
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(
+                    "Invalid PROMO_CODES env var (falling back to file only): "
+                    "%s — value was: %s", e, env_codes
+                )
 
     def validate(self, code: str, ip: str) -> float | None:
         """Return the promo amount if the code is valid and not used by this IP
