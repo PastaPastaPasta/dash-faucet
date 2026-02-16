@@ -26,10 +26,15 @@ class PromoService:
         # Load from JSON file first
         p = Path(path)
         if p.exists():
-            with open(p) as f:
-                data = json.load(f)
-            for code, info in data.items():
-                self._codes[code.upper()] = info["amount"]
+            try:
+                with open(p) as f:
+                    data = json.load(f)
+                for code, info in data.items():
+                    self._codes[code.upper()] = info["amount"]
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning(
+                    "Failed to load promo codes from %s: %s", p, e
+                )
 
         # Merge in env var codes (overrides file entries on conflict)
         env_codes = os.environ.get("PROMO_CODES")
